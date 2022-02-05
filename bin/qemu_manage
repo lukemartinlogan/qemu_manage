@@ -1,0 +1,264 @@
+#!/usr/bin/env python3
+from scsbench.runtime.bash_runtime import BashRuntime
+import os, sys
+import json
+
+class ArgumentParser:
+    def __init__(self):
+        self._args = {}
+        return
+
+    def help(self, terminate=True):
+        print("Usage:")
+        print("qemu_manage new_disk [disk_name] [disk_size (K/M/G)]")
+        print("qemu_manage rm_disk [disk_name]")
+        print("qemu_manage new_vm [vm_name]")
+        print("qemu_manage rm_vm [vm_name]")
+        print("qemu_manage list_vms")
+        print("qemu_manage list_disks")
+        print("qemu_mange start_vm [vm_name]")
+        print("qemu_manage ssh_forward [vm_name] [host_port]")
+        print("qemu_manage insert_iso [vm_name] [iso_path]")
+        print("qemu_manage remove_iso [vm_name]")
+        print("qemu_manage attach_disk [vm_name] [disk_type] [disk_path]")
+        print("qemu_manage list_disks [vm_name]")
+        print("qemu_manage detach_disk [vm_name] [disk_type] [disk_path]")
+        print("qemu_manage set_ram [vm_name] [size (K/M/G)]")
+        print("qemu_manage set_cores [vm_name] [num_cores]")
+        print("qemu_manage set_graphics [vm_name] [graphics_mode]")
+        if terminate:
+            exit(1)
+
+    def run(self):
+        if len(sys.argv) < 2:
+            self.help()
+        self.option = sys.argv[1]
+        self.inputs = sys.argv[2:]
+        return self
+
+class QemuVM:
+    def __init__(self, vm_name):
+        self.root = os.getenv("QEMU_MANAGE_ROOT")
+        self.device_root = os.path.join(self.root, "disks")
+        self.schema_root = os.path.join(self.root, "vms")
+        self.schema_path = os.path.join(self.schema_root, f'{vm_name}_schema.json')
+        self.vm_name = vm_name
+        self.schema = {}
+        self.LoadSchema()
+        return
+
+    def LoadSchema(self):
+        if os.path.exists(self.schema_path):
+            with open(self.schema_path, 'r') as fp:
+                self.schema.update(json.load(fp))
+        else:
+            self.schema = {
+                "name": {
+                    "name": self.vm_name,
+                    "command": f'-name {self.vm_name}'
+                }
+            }
+
+    def SaveSchema(self):
+        with open(self.schema_path, 'w') as fp:
+            json.dump(self.schema, fp, indent=4)
+
+    def AttachDisk(self, disk_type, disk_name):
+        if "disks" not in self.schema:
+            self.schema["disks"] = []
+        disk_path = os.path.join(self.device_root, f'{disk_name}.qcow2')
+        if disk_type == 'nvme':
+            command = f'-drive file={disk_path},if=none,id={disk_name} -device nvme,serial=deadbeef,drive={disk_name}'
+        if disk_type == 'sata':
+            command = f'-drive file={disk_path},if=none,id={disk_name} -device ahci,id=ahci -device ide-hd,drive={disk_name},bus=ahci.0'
+        if disk_type == 'pmem':
+            command = f'-drive file={disk_path},if=none,id={disk_name} -device nvdimm,memdev={disk_name},id={disk_name + "#dimm"}'
+        self.schema["disks"].append({
+            "disk_type": disk_type,
+            "disk_name": disk_name,
+            "disk_path": disk_path,
+            "command": command
+        })
+
+    def DetachDisk(self, disk_name):
+        for i in range(len(self.schema["disks"])):
+            if self.schema["disks"][i]["disk_name"] == disk_name:
+                del self.schema["disks"][i]
+                break
+
+    def ListDisks(self):
+        print(json.dumps(self.schema["disks"], indent=4))
+
+    def InsertISO(self, iso_path):
+        self.schema["cdrom"] = {
+            "cdrom": iso_path,
+            "command": f'-cdrom {iso_path}'
+        }
+
+    def RemoveISO(self, iso_path):
+        del self.schema["cdrom"]
+
+    def SetSSHForwarding(self, port):
+        self.schema["ssh_forward"] = {
+            "port": port,
+            "command": f'-net nic -net user,hostfwd=tcp::{port}-:22'
+        }
+
+    def SetRAM(self, size):
+        self.schema["ram_size"] = {
+            "size": size,
+            "command": f'-m {size}'
+        }
+
+    def SetNumCPU(self, num_cpus):
+        self.schema["num_cpus"] = {
+            "num_cpus": num_cpus,
+            "command": f'-smp {num_cpus}'
+        }
+
+    def SetGraphics(self, graphics_mode):
+        self.schema["graphics_mode"] = {
+            "mode": graphics_mode,
+            "command": f'-display {graphics_mode}'
+        }
+
+    def BuildCommand(self):
+        command = ["qemu-system-x86_64", "-machine accel=kvm", "-vnc :0"]
+        if "name" in self.schema:
+            command.append(self.schema["name"]["command"])
+        if "disks" in self.schema:
+            for disk_dict in self.schema["disks"]:
+                command.append(disk_dict["command"])
+        if "cdrom" in self.schema:
+            command.append(self.schema["cdrom"]["command"])
+        if "ssh_forward" in self.schema:
+            command.append(self.schema["ssh_forward"]["command"])
+        if "ram_size" in self.schema:
+            command.append(self.schema["ram_size"]["command"])
+        if "num_cpus" in self.schema:
+            command.append(self.schema["num_cpus"]["command"])
+        if "graphics_mode" in self.schema:
+            command.append(self.schema["graphics_mode"]["command"])
+        return " ".join(command)
+
+class QemuManager:
+    def __init__(self):
+        self.root = os.getenv("QEMU_MANAGE_ROOT")
+        self.device_root = os.path.join(self.root, "disks")
+        self.schema_root = os.path.join(self.root, "vms")
+
+    def CreateDisk(self, dev_name, dev_size):
+        device_path = os.path.join(self.device_root, f"{dev_name}.qcow2")
+        if not os.path.exists(device_path):
+            BashRuntime(f'qemu-img create -f qcow2 {device_path} {dev_size}').Run()
+        else:
+            BashRuntime(f'qemu-img resize -f qcow2 {device_path} {dev_size}').Run()
+
+    def RemoveDisk(self, dev_name):
+        device_path = os.path.join(self.device_root, f"{dev_name}.qcow2")
+        if os.path.exists(device_path):
+            os.remove(device_path)
+
+    def CreateVM(self, vm_name):
+        vm = QemuVM(vm_name)
+        vm.SaveSchema()
+
+    def StartVM(self, vm_name):
+        vm = QemuVM(vm_name)
+        command = vm.BuildCommand()
+        print(command)
+        BashRuntime(command).Run()
+
+    def RemoveVM(self, vm_name):
+        schema_path = os.path.join(self.schema_root, vm_name)
+        if os.path.exists(schema_path):
+            os.path.remove(schema_path)
+
+    def ListVMs(self):
+        for item in os.listdir(self.schema_root):
+            print(item)
+
+    def ListDisks(self, inputs):
+        if len(inputs) == 0:
+            for item in os.listdir(self.device_root):
+                print(item)
+        else:
+            vm_name = inputs[0]
+            vm = QemuVM(vm_name)
+            vm.ListDisks()
+
+    def AttachDisk(self, vm_name, disk_type, disk_name):
+        vm = QemuVM(vm_name)
+        vm.AttachDisk(disk_type, disk_name)
+        vm.SaveSchema()
+
+    def DetachDisk(self, vm_name, disk_name):
+        vm = QemuVM(vm_name)
+        vm.DetachDisk(disk_name)
+        vm.SaveSchema()
+
+    def InsertISO(self, vm_name, iso_path):
+        vm = QemuVM(vm_name)
+        vm.InsertISO(iso_path)
+        vm.SaveSchema()
+
+    def RemoveISO(self, vm_name):
+        vm = QemuVM(vm_name)
+        vm.RemoveISO()
+        vm.SaveSchema()
+
+    def SetSSHForwarding(self, vm_name, port):
+        vm = QemuVM(vm_name)
+        vm.SetSSHForwarding(port)
+        vm.SaveSchema()
+
+    def SetRAM(self, vm_name, size):
+        vm = QemuVM(vm_name)
+        vm.SetRAM(size)
+        vm.SaveSchema()
+
+    def SetNumCPU(self, vm_name, num_cpus):
+        vm = QemuVM(vm_name)
+        vm.SetNumCPU(num_cpus)
+        vm.SaveSchema()
+
+    def SetGraphics(self, vm_name, graphics_mode):
+        vm = QemuVM(vm_name)
+        vm.SetGraphics(graphics_mode)
+        vm.SaveSchema()
+
+if __name__ == "__main__":
+    args = ArgumentParser().run()
+    if args.option == 'new_disk':
+        QemuManager().CreateDisk(args.inputs[0], args.inputs[1])
+    elif args.option == 'rm_disk':
+        QemuManager().RemoveDisk(args.inputs[0])
+    elif args.option == 'new_vm':
+        QemuManager().CreateVM(args.inputs[0])
+    elif args.option == 'start_vm':
+        QemuManager().StartVM(args.inputs[0])
+    elif args.option == 'rm_vm':
+        QemuManager().RemoveVM(args.inputs[0])
+    elif args.option == 'list_vms':
+        QemuManager().ListVMs()
+    elif args.option == 'list_disks':
+        QemuManager().ListDisks(args.inputs)
+    elif args.option == 'attach_disk':
+        QemuManager().AttachDisk(args.inputs[0], args.inputs[1], args.inputs[2])
+    elif args.option == 'detach_disk':
+        QemuManager().DetachDisk(args.inputs[0], args.inputs[1])
+    elif args.option == 'insert_iso':
+        QemuManager().InsertISO(args.inputs[0], args.inputs[1])
+    elif args.option == 'rm_iso':
+        QemuManager().RemoveISO(args.inputs[0], args.inputs[1])
+    elif args.option == 'ssh_forward':
+        QemuManager().SetSSHForwarding(args.inputs[0], args.inputs[1])
+    elif args.option == 'set_ram':
+        QemuManager().SetRAM(args.inputs[0], args.inputs[1])
+    elif args.option == 'set_cores':
+        QemuManager().SetNumCPU(args.inputs[0], args.inputs[1])
+    elif args.option == 'set_graphics':
+        QemuManager().SetGraphics(args.inputs[0], args.inputs[1])
+    else:
+        print("Invalid option: {}".format(args.option))
+        args.help()
