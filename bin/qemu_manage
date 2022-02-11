@@ -17,7 +17,6 @@ class ArgumentParser:
         print("qemu_manage new_vm [vm_name]")
         print("qemu_manage new_vm_script")
         print("qemu_manage clone_vm [vm_name] [count]")
-        print("qemu_manage clone_vm [vm_name] [count]")
         print("qemu_manage rm_vm [vm_name]")
         print("qemu_manage list_vms")
         print("qemu_manage list_disks")
