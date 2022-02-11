@@ -5,9 +5,35 @@ A small convenience script for creating and launching QEMU VMs.
 ## Dependencies
 
 * Python3
+* scspkg
 * jarvis_cd
 
-## Jarvis CD
+### SCSPKG
+
+```
+git clone https://github.com/lukemartinlogan/scspkg.git
+cd /path/to/scspkg
+bash install.sh
+source ~/.bashrc
+```
+
+### Environment Modules
+
+```
+scspkg create modules
+cd `scspkg pkg-src modules`
+curl -LJO https://github.com/cea-hpc/modules/releases/download/v4.7.1/modules-4.7.1.tar.gz
+tar xfz modules-4.7.1.tar.gz
+cd modules-4.7.1
+./configure --prefix=`scspkg pkg-root modules`
+make
+make install
+echo "source \`scspkg pkg-root modules\`/init/bash" >> ~/.bashrc
+echo "module use \`scspkg modules-path\`" >> ~/.bashrc
+source ~/.bashrc
+```
+
+### Jarvis CD
 
 ```{bash}
 git clone https://github.com/lukemartinlogan/jarvis-cd.git
