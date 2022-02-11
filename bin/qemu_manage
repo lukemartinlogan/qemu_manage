@@ -2,6 +2,7 @@
 from scsbench.runtime.bash_runtime import BashRuntime
 import os, sys
 import json
+import shutil
 
 class ArgumentParser:
     def __init__(self):
@@ -11,8 +12,12 @@ class ArgumentParser:
     def help(self, terminate=True):
         print("Usage:")
         print("qemu_manage new_disk [disk_name] [disk_size (K/M/G)]")
+        print("qemu_manage clone_disk [disk_name] [new_disk_name]")
         print("qemu_manage rm_disk [disk_name]")
         print("qemu_manage new_vm [vm_name]")
+        print("qemu_manage new_vm_script")
+        print("qemu_manage clone_vm [vm_name] [count]")
+        print("qemu_manage clone_vm [vm_name] [count]")
         print("qemu_manage rm_vm [vm_name]")
         print("qemu_manage list_vms")
         print("qemu_manage list_disks")
@@ -20,12 +25,14 @@ class ArgumentParser:
         print("qemu_manage ssh_forward [vm_name] [host_port]")
         print("qemu_manage insert_iso [vm_name] [iso_path]")
         print("qemu_manage remove_iso [vm_name]")
-        print("qemu_manage attach_disk [vm_name] [disk_type] [disk_path]")
+        print("qemu_manage attach_disk [vm_name] [disk_type] [disk_name]")
         print("qemu_manage list_disks [vm_name]")
-        print("qemu_manage detach_disk [vm_name] [disk_type] [disk_path]")
+        print("qemu_manage detach_disk [vm_name] [disk_type] [disk_name]")
         print("qemu_manage set_ram [vm_name] [size (K/M/G)]")
         print("qemu_manage set_cores [vm_name] [num_cores]")
         print("qemu_manage set_graphics [vm_name] [graphics_mode]")
+        print("qemu_manage ssh [vm_name] [username]")
+        print("qemu_manage install_keys [vm_name] [username] [key_dir] [key_name]")
         if terminate:
             exit(1)
 
@@ -59,24 +66,32 @@ class QemuVM:
                 }
             }
 
+    def CopySchema(self, other):
+        self.schema = other.schema
+
     def SaveSchema(self):
         with open(self.schema_path, 'w') as fp:
             json.dump(self.schema, fp, indent=4)
 
+    def _count_disks_of_type(self, disk_type):
+        return sum(disk['disk_type'] == disk_type for disk in self.schema['disks'])
+
     def AttachDisk(self, disk_type, disk_name):
         if "disks" not in self.schema:
             self.schema["disks"] = []
+        disk_id = self._count_disks_of_type(disk_type)
         disk_path = os.path.join(self.device_root, f'{disk_name}.qcow2')
         if disk_type == 'nvme':
             command = f'-drive file={disk_path},if=none,id={disk_name} -device nvme,serial=deadbeef,drive={disk_name}'
         if disk_type == 'sata':
-            command = f'-drive file={disk_path},if=none,id={disk_name} -device ahci,id=ahci -device ide-hd,drive={disk_name},bus=ahci.0'
+            command = f'-drive file={disk_path},if=none,id={disk_name} -device ahci,id={disk_name}_ahci -device ide-hd,drive={disk_name},bus=ahci.{disk_id}'
         if disk_type == 'pmem':
             command = f'-drive file={disk_path},if=none,id={disk_name} -device nvdimm,memdev={disk_name},id={disk_name + "#dimm"}'
         self.schema["disks"].append({
             "disk_type": disk_type,
             "disk_name": disk_name,
             "disk_path": disk_path,
+            "disk_id": disk_id,
             "command": command
         })
 
@@ -100,7 +115,7 @@ class QemuVM:
 
     def SetSSHForwarding(self, port):
         self.schema["ssh_forward"] = {
-            "port": port,
+            "port": int(port),
             "command": f'-net nic -net user,hostfwd=tcp::{port}-:22'
         }
 
@@ -141,6 +156,9 @@ class QemuVM:
             command.append(self.schema["graphics_mode"]["command"])
         return " ".join(command)
 
+    def GetPort(self):
+        return self.schema["ssh_forward"]["port"]
+
 class QemuManager:
     def __init__(self):
         self.root = os.getenv("QEMU_MANAGE_ROOT")
@@ -154,6 +172,11 @@ class QemuManager:
         else:
             BashRuntime(f'qemu-img resize -f qcow2 {device_path} {dev_size}').Run()
 
+    def CloneDisk(self, dev_name, new_dev_name):
+        device_path = os.path.join(self.device_root, f"{dev_name}.qcow2")
+        new_device_path = os.path.join(self.device_root, f"{new_dev_name}.qcow2")
+        shutil.copyfile(device_path, new_device_path)
+
     def RemoveDisk(self, dev_name):
         device_path = os.path.join(self.device_root, f"{dev_name}.qcow2")
         if os.path.exists(device_path):
@@ -161,6 +184,31 @@ class QemuManager:
 
     def CreateVM(self, vm_name):
         vm = QemuVM(vm_name)
+        vm.SaveSchema()
+
+    def CloneVM(self, vm_name, count):
+        count = int(count)
+        vm = QemuVM(vm_name)
+        for i in range(count):
+            cloned_vm_name = f'{vm_name}_{i+1}'
+            print(f'Creating VM {cloned_vm_name}')
+            cloned_vm = QemuVM(cloned_vm_name)
+            cloned_vm.CopySchema(vm)
+            #Clone the disks
+            if 'disks' in cloned_vm.schema:
+                for disk in cloned_vm.schema['disks']:
+                    disk_name = disk['disk_name']
+                    print(f'Cloning Disk {disk_name}')
+                    cloned_disk_name = f'{disk_name}_{i+1}'
+                    cloned_disk_type = disk['disk_type']
+                    self.CloneDisk(disk_name, cloned_disk_name)
+                    cloned_vm.DetachDisk(disk_name)
+                    cloned_vm.AttachDisk(cloned_disk_name, cloned_disk_type)
+            #Change the SSH forwarding port
+            if 'ssh_forward' in cloned_vm.schema:
+                vm_ssh = int(cloned_vm['ssh_forward']['port'])
+                cloned_vm.SetSSHForwarding(vm_ssh + i + 1)
+                print(f'{cloned_vm_name}: SSH port {vm_ssh + i + 1}')
         vm.SaveSchema()
 
     def StartVM(self, vm_name):
@@ -227,14 +275,101 @@ class QemuManager:
         vm.SetGraphics(graphics_mode)
         vm.SaveSchema()
 
+    def SSH(self, vm_name, username):
+        vm = QemuVM(vm_name)
+        port = vm.GetPort()
+        print(f'ssh -p {port} {username}@localhost')
+
+    def InstallKeys(self, vm_name, username, key_dir, key_name):
+        vm = QemuVM(vm_name)
+        port = vm.GetPort()
+        pubkey_path = os.path.join(key_dir, f'{key_name}.pub')
+        privkey_path = os.path.join(key_dir, key_name)
+        print(f'ssh-copy-id -f -i {privkey_path} -p {port} {username}@localhost')
+        print(f'scp -P {port} {pubkey_path} {username}@localhost:~/.ssh/')
+        print(f'scp -P {port} {privkey_path} {username}@localhost:~/.ssh/')
+        commands = [
+            f'chmod 700 \${{HOME}}/.ssh',
+            f'chmod 644 \${{HOME}}/.ssh/{key_name}.pub',
+            f'chmod 600 \${{HOME}}/.ssh/{key_name}',
+            f'chmod 600 \${{HOME}}/.ssh/authorized_keys',
+            f'chmod 600 \${{HOME}}/.ssh/config',
+        ]
+        command = ";".join(commands)
+        print(f'ssh {username}@localhost -p {port} \"{command}\"')
+
+    def CreateVMScript(self):
+        vm_name = input('Enter VM name: ')
+        vm = QemuVM(vm_name)
+
+        #Create & attach disks
+        should_ask = True
+        while should_ask:
+            new_disk = input('Would you like to create a new disk? (yes/no): ')
+            if new_disk[0] == 'y' or new_disk[0] == 'Y':
+                disk_name = input('Name of the disk: ')
+                disk_size = input('Size of the disk (K/M/G): ')
+                disk_type = input('Type of the disk (sata/nvme/pmem): ')
+                self.CreateDisk(disk_name, disk_size)
+                vm.AttachDisk(disk_type, disk_name)
+            elif new_disk[0] == 'n' or new_disk[0] == 'N':
+                should_ask = False
+            else:
+                print('Invalid input')
+
+        #Clone & attach disks
+        should_ask = True
+        while should_ask:
+            clone_disk = input('Would you like to clone an existing disk? (yes/no): ')
+            if clone_disk[0] == 'y' or clone_disk[0] == 'Y':
+                disk_name = input('Name of the existing disk: ')
+                new_disk_name = input('Name of the clone: ')
+                disk_type = input('Type of the disk (sata/nvme/pmem): ')
+                self.CloneDisk(disk_name, new_disk_name)
+                vm.AttachDisk(disk_type, new_disk_name)
+            elif clone_disk[0] == 'n' or clone_disk[0] == 'N':
+                should_ask = False
+            else:
+                print('Invalid input')
+
+        #Set SSH forwarding
+        ssh_port = input('SSH port: ')
+        vm.SetSSHForwarding(ssh_port)
+
+        #Set CPU cores
+        num_cpus = input('Number of CPU cores: ')
+        vm.SetNumCPU(num_cpus)
+
+        #Set RAM
+        ram = input('Amount of RAM (K/M/G): ')
+        vm.SetRAM(ram)
+
+        #Set the graphics interface
+        graphics = input('Set the graphcs backend (none/gtk): ')
+        vm.SetGraphics(graphics)
+
+        #Set install media (if applicable)
+        iso = input('Set the path to the OS image file (skip if none): ')
+        if iso is not None:
+            print(f'Inserting ISO: {iso}')
+            vm.InsertISO(iso)
+
+        vm.SaveSchema()
+
+
+
 if __name__ == "__main__":
     args = ArgumentParser().run()
     if args.option == 'new_disk':
         QemuManager().CreateDisk(args.inputs[0], args.inputs[1])
+    if args.option == 'clone_disk':
+        QemuManager().CloneDisk(args.inputs[0], args.inputs[1])
     elif args.option == 'rm_disk':
         QemuManager().RemoveDisk(args.inputs[0])
     elif args.option == 'new_vm':
         QemuManager().CreateVM(args.inputs[0])
+    elif args.option == 'clone_vm':
+        QemuManager().CloneVM(args.inputs[0], args.inputs[1])
     elif args.option == 'start_vm':
         QemuManager().StartVM(args.inputs[0])
     elif args.option == 'rm_vm':
@@ -259,6 +394,12 @@ if __name__ == "__main__":
         QemuManager().SetNumCPU(args.inputs[0], args.inputs[1])
     elif args.option == 'set_graphics':
         QemuManager().SetGraphics(args.inputs[0], args.inputs[1])
+    elif args.option == 'ssh':
+        QemuManager().SSH(args.inputs[0], args.inputs[1])
+    elif args.option == 'install_keys':
+        QemuManager().InstallKeys(args.inputs[0], args.inputs[1], args.inputs[2], args.inputs[3])
+    elif args.option == 'new_vm_script':
+        QemuManager().CreateVMScript()
     else:
         print("Invalid option: {}".format(args.option))
         args.help()
