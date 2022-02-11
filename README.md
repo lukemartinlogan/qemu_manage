@@ -5,10 +5,22 @@ A small convenience script for creating and launching QEMU VMs.
 ## Dependencies
 
 * Python3
+* jarvis_cd
+
+## Jarvis CD
+
+```{bash}
+git clone https://github.com/lukemartinlogan/jarvis-cd.git
+git clone https://github.com/scs-lab/jarvis-cd.git
+cd jarvis-cd
+bash install.sh
+source ~/.bashrc
+```
 
 ## Installation
 
 ```{bash}
+cd /path/to/qemu_manage
 bash install.sh [INSTALL_DIR (optional)]
 source ~/.bashrc
 ```

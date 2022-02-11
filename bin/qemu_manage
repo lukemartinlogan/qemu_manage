@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from scsbench.runtime.bash_runtime import BashRuntime
+from jarvis_cd.exec_node import ExecNode
 import os, sys
 import json
 import shutil
@@ -167,9 +167,9 @@ class QemuManager:
     def CreateDisk(self, dev_name, dev_size):
         device_path = os.path.join(self.device_root, f"{dev_name}.qcow2")
         if not os.path.exists(device_path):
-            BashRuntime(f'qemu-img create -f qcow2 {device_path} {dev_size}').Run()
+            ExecNode('ImageCreate', f'qemu-img create -f qcow2 {device_path} {dev_size}', collect_output=False).Run()
         else:
-            BashRuntime(f'qemu-img resize -f qcow2 {device_path} {dev_size}').Run()
+            ExecNode('ImageCreate', f'qemu-img resize -f qcow2 {device_path} {dev_size}', collect_output=False).Run()
 
     def CloneDisk(self, dev_name, new_dev_name):
         device_path = os.path.join(self.device_root, f"{dev_name}.qcow2")
@@ -214,7 +214,7 @@ class QemuManager:
         vm = QemuVM(vm_name)
         command = vm.BuildCommand()
         print(command)
-        BashRuntime(command).Run()
+        ExecNode('StartVM', command, collect_output=False).Run()
 
     def RemoveVM(self, vm_name):
         schema_path = os.path.join(self.schema_root, vm_name)
@@ -361,7 +361,7 @@ if __name__ == "__main__":
     args = ArgumentParser().run()
     if args.option == 'new_disk':
         QemuManager().CreateDisk(args.inputs[0], args.inputs[1])
-    if args.option == 'clone_disk':
+    elif args.option == 'clone_disk':
         QemuManager().CloneDisk(args.inputs[0], args.inputs[1])
     elif args.option == 'rm_disk':
         QemuManager().RemoveDisk(args.inputs[0])
