@@ -83,7 +83,7 @@ class QemuVM:
         if disk_type == 'nvme':
             command = f'-drive file={disk_path},if=none,id={disk_name} -device nvme,serial=deadbeef,drive={disk_name}'
         if disk_type == 'sata':
-            command = f'-drive file={disk_path},if=none,id={disk_name} -device ahci,id={disk_name}_ahci -device ide-hd,drive={disk_name},bus=ahci.{disk_id}'
+            command = f'-drive file={disk_path},if=none,id={disk_name} -device ahci,id=ahci -device ide-hd,drive={disk_name},bus=ahci.{disk_id}'
         if disk_type == 'pmem':
             command = f'-drive file={disk_path},if=none,id={disk_name} -device nvdimm,memdev={disk_name},id={disk_name + "#dimm"}'
         self.schema["disks"].append({
