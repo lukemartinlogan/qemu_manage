@@ -350,7 +350,7 @@ class QemuManager:
 
         #Set install media (if applicable)
         iso = input('Set the path to the OS image file (skip if none): ')
-        if iso is not None:
+        if iso is not None or iso == '':
             print(f'Inserting ISO: {iso}')
             vm.InsertISO(iso)
 
