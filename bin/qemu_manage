@@ -331,6 +331,19 @@ class QemuManager:
             else:
                 print('Invalid input')
 
+        #Attach existing disks
+        should_ask = True
+        while should_ask:
+            clone_disk = input('Would you like use an existing disk? (yes/no): ')
+            if clone_disk[0] == 'y' or clone_disk[0] == 'Y':
+                disk_name = input('Name of the existing disk: ')
+                disk_type = input('Type of the disk (sata/nvme/pmem): ')
+                vm.AttachDisk(disk_type, disk_name)
+            elif clone_disk[0] == 'n' or clone_disk[0] == 'N':
+                should_ask = False
+            else:
+                print('Invalid input')
+
         #Set SSH forwarding
         ssh_port = input('SSH port: ')
         vm.SetSSHForwarding(ssh_port)
