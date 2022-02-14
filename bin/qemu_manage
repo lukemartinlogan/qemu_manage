@@ -80,12 +80,16 @@ class QemuVM:
     def AttachDisk(self, disk_type, disk_name):
         if "disks" not in self.schema:
             self.schema["disks"] = []
+        if "connectors" not in self.schema:
+            self.schema["connectors"] = []
         disk_id = self._count_disks_of_type(disk_type)
         disk_path = os.path.join(self.device_root, f'{disk_name}.qcow2')
         if disk_type == 'nvme':
             command = f'-drive file={disk_path},if=none,id={disk_name} -device nvme,serial=deadbeef,drive={disk_name}'
         if disk_type == 'sata':
-            command = f'-drive file={disk_path},if=none,id={disk_name} -device ahci,id=ahci -device ide-hd,drive={disk_name},bus=ahci.{disk_id}'
+            if 'sata' not in self.schema['connectors']:
+                self.schema['connectors']['sata'] = {"command": "-device ahci,id=ahci"}
+            command = f'-drive file={disk_path},if=none,id={disk_name} -device ide-hd,drive={disk_name},bus=ahci.{disk_id}'
         if disk_type == 'pmem':
             command = f'-drive file={disk_path},if=none,id={disk_name} -device nvdimm,memdev={disk_name},id={disk_name + "#dimm"}'
         self.schema["disks"].append({
@@ -145,6 +149,9 @@ class QemuVM:
         if "disks" in self.schema:
             for disk_dict in self.schema["disks"]:
                 command.append(disk_dict["command"])
+        if "connectors" in self.schema:
+            if "sata" in self.schema["connectors"]:
+                command.append(self.schema["connectors"]["sata"]["command"])
         if "cdrom" in self.schema:
             command.append(self.schema["cdrom"]["command"])
         if "ssh_forward" in self.schema:
