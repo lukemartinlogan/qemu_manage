@@ -223,9 +223,11 @@ class QemuManager:
         ExecNode('StartVM', command, collect_output=False).Run()
 
     def RemoveVM(self, vm_name):
-        schema_path = os.path.join(self.schema_root, vm_name)
+        schema_path = os.path.join(self.schema_root, f'{vm_name}_schema.json')
         if os.path.exists(schema_path):
             os.path.remove(schema_path)
+        else:
+            print(f"The VM {vm_name} does not exist")
 
     def ListVMs(self):
         for item in os.listdir(self.schema_root):
