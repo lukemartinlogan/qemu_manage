@@ -225,7 +225,7 @@ class QemuManager:
     def RemoveVM(self, vm_name):
         schema_path = os.path.join(self.schema_root, f'{vm_name}_schema.json')
         if os.path.exists(schema_path):
-            os.path.remove(schema_path)
+            os.remove(schema_path)
         else:
             print(f"The VM {vm_name} does not exist")
 
