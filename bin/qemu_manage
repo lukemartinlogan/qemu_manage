@@ -292,18 +292,19 @@ class QemuManager:
         port = vm.GetPort()
         pubkey_path = os.path.join(key_dir, f'{key_name}.pub')
         privkey_path = os.path.join(key_dir, key_name)
-        print(f'ssh-copy-id -f -i {privkey_path} -p {port} {username}@localhost')
-        print(f'scp -P {port} {pubkey_path} {username}@localhost:~/.ssh/')
-        print(f'scp -P {port} {privkey_path} {username}@localhost:~/.ssh/')
+        ExecNode('install_pubkey', f'ssh-copy-id -f -i {privkey_path} -p {port} {username}@localhost', collect_output=False)
+        ExecNode('make_ssh_dir', f'ssh -p {port} {username}@localhost mkdir ~/.ssh', collect_output=False).Run()
+        ExecNode('scp_pubkey', f'scp -P {port} {pubkey_path} {username}@localhost:~/.ssh/{key_name}.pub', collect_output=False).Run()
+        ExecNode('scp_privkey', f'scp -P {port} {privkey_path} {username}@localhost:~/.ssh/{key_name}', collect_output=False).Run()
         commands = [
-            f'chmod 700 \${{HOME}}/.ssh',
-            f'chmod 644 \${{HOME}}/.ssh/{key_name}.pub',
-            f'chmod 600 \${{HOME}}/.ssh/{key_name}',
-            f'chmod 600 \${{HOME}}/.ssh/authorized_keys',
-            f'chmod 600 \${{HOME}}/.ssh/config',
+            f'chmod 700 ~/.ssh',
+            f'chmod 644 ~/.ssh/{key_name}.pub',
+            f'chmod 600 ~/.ssh/{key_name}',
+            f'chmod 600 ~/.ssh/authorized_keys',
+            f'chmod 600 ~/.ssh/config',
         ]
         command = ";".join(commands)
-        print(f'ssh {username}@localhost -p {port} \"{command}\"')
+        ExecNode('permissions', f'ssh -p {port} {username}@localhost \"{command}\"', collect_output=False).Run()
 
     def CreateVMScript(self):
         vm_name = input('Enter VM name: ')
