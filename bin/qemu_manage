@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from jarvis_cd.exec_node import ExecNode
+from jarvis_cd.ssh_node import SSHNode
 import os, sys
 import json
 import shutil
@@ -14,6 +15,7 @@ class ArgumentParser:
         print("qemu_manage new_disk [disk_name] [disk_size (K/M/G)]")
         print("qemu_manage clone_disk [disk_name] [new_disk_name]")
         print("qemu_manage rm_disk [disk_name]")
+        print("qemu_manage resize_disk [disk_name] [new_size (K/M/G)]")
         print("qemu_manage new_vm [vm_name]")
         print("qemu_manage new_vm_script")
         print("qemu_manage clone_vm [vm_name] [count]")
@@ -176,6 +178,10 @@ class QemuManager:
         new_device_path = os.path.join(self.device_root, f"{new_dev_name}.qcow2")
         shutil.copyfile(device_path, new_device_path)
 
+    def ResizeDisk(self, dev_name, dev_size):
+        device_path = os.path.join(self.device_root, f"{dev_name}.qcow2")
+        ExecNode('ImageCreate', f'qemu-img resize -f qcow2 {device_path} {dev_size}', collect_output=False).Run()
+
     def RemoveDisk(self, dev_name):
         device_path = os.path.join(self.device_root, f"{dev_name}.qcow2")
         if os.path.exists(device_path):
@@ -277,7 +283,7 @@ class QemuManager:
     def SSH(self, vm_name, username):
         vm = QemuVM(vm_name)
         port = vm.GetPort()
-        print(f'ssh -p {port} {username}@localhost')
+        ExecNode('sshnode', f'ssh -p {port} {username}@localhost', collect_output=False).Run()
 
     def InstallKeys(self, vm_name, username, key_dir, key_name):
         vm = QemuVM(vm_name)
@@ -378,6 +384,8 @@ if __name__ == "__main__":
         QemuManager().CloneDisk(args.inputs[0], args.inputs[1])
     elif args.option == 'rm_disk':
         QemuManager().RemoveDisk(args.inputs[0])
+    elif args.option == 'resize_disk':
+        QemuManager().ResizeDisk(args.inputs[0], args.inputs[1])
     elif args.option == 'new_vm':
         QemuManager().CreateVM(args.inputs[0])
     elif args.option == 'clone_vm':
