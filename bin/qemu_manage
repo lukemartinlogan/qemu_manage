@@ -45,12 +45,13 @@ class ArgumentParser:
         return self
 
 class QemuVM:
-    def __init__(self, vm_name):
+    def __init__(self, vm_name, vm_id):
         self.root = os.getenv("QEMU_MANAGE_ROOT")
         self.device_root = os.path.join(self.root, "disks")
         self.schema_root = os.path.join(self.root, "vms")
         self.schema_path = os.path.join(self.schema_root, f'{vm_name}_schema.json')
         self.vm_name = vm_name
+        self.vm_id = vm_id
         self.schema = {}
         self.LoadSchema()
         return
@@ -60,12 +61,8 @@ class QemuVM:
             with open(self.schema_path, 'r') as fp:
                 self.schema.update(json.load(fp))
         else:
-            self.schema = {
-                "name": {
-                    "name": self.vm_name,
-                    "command": f'-name {self.vm_name}'
-                }
-            }
+            self.SetName(self.vm_name)
+            self.SetNIC(self.vm_id)
 
     def CopySchema(self, other):
         self.schema = other.schema
@@ -73,6 +70,19 @@ class QemuVM:
     def SaveSchema(self):
         with open(self.schema_path, 'w') as fp:
             json.dump(self.schema, fp, indent=4)
+
+    def SetName(self, name):
+        self.vm_name = name
+        self.schema["name"] = {
+            "name": self.vm_name,
+            "command": f'-name {self.vm_name}'
+        }
+
+    def SetNIC(self, nic_id):
+        self.schema["nic"] = {
+            "id": nic_id,
+            "command": f'-vnc :{nic_id}'
+        }
 
     def _count_disks_of_type(self, disk_type):
         return sum(disk['disk_type'] == disk_type for disk in self.schema['disks'])
@@ -143,7 +153,7 @@ class QemuVM:
         }
 
     def BuildCommand(self):
-        command = ["qemu-system-x86_64", "-machine accel=kvm", "-vnc :0"]
+        command = ["qemu-system-x86_64"]
         if "name" in self.schema:
             command.append(self.schema["name"]["command"])
         if "disks" in self.schema:
@@ -162,6 +172,10 @@ class QemuVM:
             command.append(self.schema["num_cpus"]["command"])
         if "graphics_mode" in self.schema:
             command.append(self.schema["graphics_mode"]["command"])
+        if "nic" in self.schema:
+            command.append(self.schema["nic"]["command"])
+        if "hardware_accel" in self.schema:
+            command.append(self.schema["hardware_accel"]["command"])
         return " ".join(command)
 
     def GetPort(self):
@@ -172,6 +186,25 @@ class QemuManager:
         self.root = os.getenv("QEMU_MANAGE_ROOT")
         self.device_root = os.path.join(self.root, "disks")
         self.schema_root = os.path.join(self.root, "vms")
+        self.conf_path = os.path.join(self.root, "conf")
+        self.conf = {"vm_count": 0}
+
+    def LoadConf(self):
+        if os.path.exists(self.conf_path):
+            with open(self.conf_path, 'r') as fp:
+                self.conf.update(json.load(fp))
+        else:
+            self.SaveConf()
+
+    def SaveConf(self):
+        with open(self.conf_path, 'w') as fp:
+            json.dump(self.conf, fp, indent=4)
+
+    def AllocVMID(self):
+        id = self.conf["vm_count"]
+        self.conf["vm_count"] += 1
+        self.SaveConf()
+        return id
 
     def CreateDisk(self, dev_name, dev_size):
         device_path = os.path.join(self.device_root, f"{dev_name}.qcow2")
@@ -195,7 +228,7 @@ class QemuManager:
             os.remove(device_path)
 
     def CreateVM(self, vm_name):
-        vm = QemuVM(vm_name)
+        vm = QemuVM(vm_name, AllocVMID())
         vm.SaveSchema()
 
     def CloneVM(self, vm_name, count):
