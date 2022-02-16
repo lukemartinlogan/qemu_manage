@@ -186,7 +186,7 @@ class QemuManager:
         self.root = os.getenv("QEMU_MANAGE_ROOT")
         self.device_root = os.path.join(self.root, "disks")
         self.schema_root = os.path.join(self.root, "vms")
-        self.conf_path = os.path.join(self.root, "conf")
+        self.conf_path = os.path.join(self.root, "conf", "conf.json")
         self.conf = {"vm_count": 0}
 
     def LoadConf(self):
@@ -348,7 +348,7 @@ class QemuManager:
 
     def CreateVMScript(self):
         vm_name = input('Enter VM name: ')
-        vm = QemuVM(vm_name)
+        vm = QemuVM(vm_name, self.AllocVMID())
 
         #Create & attach disks
         should_ask = True
