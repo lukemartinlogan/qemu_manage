@@ -96,7 +96,7 @@ class QemuVM:
         if "disks" not in self.schema:
             self.schema["disks"] = []
         if "connectors" not in self.schema:
-            self.schema["connectors"] = []
+            self.schema["connectors"] = {}
         disk_id = self._count_disks_of_type(disk_type)
         disk_path = os.path.join(self.device_root, f'{disk_name}.qcow2')
         if disk_type == 'nvme':
