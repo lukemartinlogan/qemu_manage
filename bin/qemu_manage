@@ -61,7 +61,6 @@ class QemuVM:
                 self.schema.update(json.load(fp))
         else:
             self.SetName(self.vm_name)
-            self.SetNIC(self.vm_id)
 
     def CopySchema(self, other):
         self.schema = other.schema
@@ -236,7 +235,9 @@ class QemuManager:
 
     def CreateVM(self, vm_name):
         vm = QemuVM(vm_name)
-        vm.SetVMID(self.AllocVMID())
+        vm_id = self.AllocVMID()
+        vm.SetVMID(vm_id)
+        self.SetNIC(vm_id)
         vm.SaveSchema()
 
     def CloneVM(self, vm_name, count):
@@ -357,7 +358,9 @@ class QemuManager:
     def CreateVMScript(self):
         vm_name = input('Enter VM name: ')
         vm = QemuVM(vm_name)
-        vm.SetVMID(self.AllocVMID())
+        vm_id = self.AllocVMID()
+        vm.SetVMID(vm_id)
+        vm.SetNIC(vm_id)
 
         #Create & attach disks
         should_ask = True
