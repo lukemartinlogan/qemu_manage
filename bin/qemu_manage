@@ -168,6 +168,19 @@ class QemuVM:
             "command": f'-display {graphics_mode}'
         }
 
+    def SetHardwareAccel(self, accel_type):
+        if "hardware_accel" not in self.schema:
+            self.schema["hardware_accel"] = {}
+        if accel_type is None:
+            self.schema["hardware_accel"] = {}
+            return
+        if accel_type is "kvm":
+            self.schema["hardware_accel"]["kvm"] = {
+                "command": "-machine accel=kvm"
+            }
+        else:
+            print(f"Unknown accelerator type: {accel_type}")
+
     def BuildCommand(self):
         command = ["qemu-system-x86_64"]
         if "name" in self.schema:
@@ -250,7 +263,8 @@ class QemuManager:
         vm = QemuVM(vm_name)
         vm_id = self.AllocVMID()
         vm.SetVMID(vm_id)
-        self.SetNIC(vm_id)
+        vm.SetNIC(vm_id)
+        vm.SetHardwareAccel('kvm')
         vm.SaveSchema()
 
     def CloneVM(self, vm_name, count):
@@ -259,8 +273,11 @@ class QemuManager:
         for i in range(count):
             cloned_vm_name = f'{vm_name}_{i+1}'
             print(f'Creating VM {cloned_vm_name}')
+            vm_id = self.AllocVMID()
             cloned_vm = QemuVM(cloned_vm_name)
             cloned_vm.CopySchema(vm)
+            cloned_vm.SetVMID(vm_id)
+            cloned_vm.SetNIC(vm_id)
             #Clone the disks
             if 'disks' in cloned_vm.schema:
                 for disk in cloned_vm.schema['disks']:
@@ -374,6 +391,7 @@ class QemuManager:
         vm_id = self.AllocVMID()
         vm.SetVMID(vm_id)
         vm.SetNIC(vm_id)
+        vm.SetHardwareAccel('kvm')
 
         #Create & attach disks
         should_ask = True
