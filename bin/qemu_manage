@@ -92,20 +92,31 @@ class QemuVM:
     def _count_disks_of_type(self, disk_type):
         return sum(disk['disk_type'] == disk_type for disk in self.schema['disks'])
 
+    def _verify_disk_type(self, disk_type):
+        return (
+            disk_type == "nvme" or
+            disk_type == "sata" or
+            disk_type == "pmem"
+        )
+
     def AttachDisk(self, disk_type, disk_name):
         if "disks" not in self.schema:
             self.schema["disks"] = []
         if "connectors" not in self.schema:
             self.schema["connectors"] = {}
+        if not self._verify_disk_type(disk_type):
+            print(f"Invalid disk type: {disk_type}")
+            return
+
         disk_id = self._count_disks_of_type(disk_type)
         disk_path = os.path.join(self.device_root, f'{disk_name}.qcow2')
         if disk_type == 'nvme':
             command = f'-drive file={disk_path},if=none,id={disk_name} -device nvme,serial=deadbeef,drive={disk_name}'
-        if disk_type == 'sata':
+        elif disk_type == 'sata':
             if 'sata' not in self.schema['connectors']:
                 self.schema['connectors']['sata'] = {"command": "-device ahci,id=ahci"}
             command = f'-drive file={disk_path},if=none,id={disk_name} -device ide-hd,drive={disk_name},bus=ahci.{disk_id}'
-        if disk_type == 'pmem':
+        elif disk_type == 'pmem':
             command = f'-drive file={disk_path},if=none,id={disk_name} -device nvdimm,memdev={disk_name},id={disk_name + "#dimm"}'
         self.schema["disks"].append({
             "disk_type": disk_type,
