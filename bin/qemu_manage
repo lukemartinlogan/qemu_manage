@@ -45,13 +45,12 @@ class ArgumentParser:
         return self
 
 class QemuVM:
-    def __init__(self, vm_name, vm_id):
+    def __init__(self, vm_name):
         self.root = os.getenv("QEMU_MANAGE_ROOT")
         self.device_root = os.path.join(self.root, "disks")
         self.schema_root = os.path.join(self.root, "vms")
         self.schema_path = os.path.join(self.schema_root, f'{vm_name}_schema.json')
         self.vm_name = vm_name
-        self.vm_id = vm_id
         self.schema = {}
         self.LoadSchema()
         return
@@ -73,10 +72,17 @@ class QemuVM:
 
     def SetName(self, name):
         self.vm_name = name
-        self.schema["name"] = {
-            "name": self.vm_name,
-            "command": f'-name {self.vm_name}'
-        }
+        if "name" not in self.schema:
+            self.schema["name"] = {
+                "name": self.vm_name,
+                "id": None,
+                "command": f'-name {self.vm_name}'
+            }
+        else:
+            self.schema["name"]["name"] = name
+
+    def SetVMID(self, vm_id):
+        self.schema["name"]["id"] = vm_id
 
     def SetNIC(self, nic_id):
         self.schema["nic"] = {
@@ -175,7 +181,8 @@ class QemuVM:
         if "nic" in self.schema:
             command.append(self.schema["nic"]["command"])
         if "hardware_accel" in self.schema:
-            command.append(self.schema["hardware_accel"]["command"])
+            for accel in self.schema["hardware_accel"].values():
+                command.append(accel["command"])
         return " ".join(command)
 
     def GetPort(self):
@@ -228,7 +235,8 @@ class QemuManager:
             os.remove(device_path)
 
     def CreateVM(self, vm_name):
-        vm = QemuVM(vm_name, AllocVMID())
+        vm = QemuVM(vm_name)
+        vm.SetVMID(self.AllocVMID())
         vm.SaveSchema()
 
     def CloneVM(self, vm_name, count):
@@ -348,7 +356,8 @@ class QemuManager:
 
     def CreateVMScript(self):
         vm_name = input('Enter VM name: ')
-        vm = QemuVM(vm_name, self.AllocVMID())
+        vm = QemuVM(vm_name)
+        vm.SetVMID(self.AllocVMID())
 
         #Create & attach disks
         should_ask = True
