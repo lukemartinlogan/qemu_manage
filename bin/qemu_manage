@@ -205,8 +205,10 @@ class QemuManager:
         self.schema_root = os.path.join(self.root, "vms")
         self.conf_path = os.path.join(self.root, "conf", "conf.json")
         self.conf = {"vm_count": 0}
+        self.LoadConf()
 
     def LoadConf(self):
+        print(self.conf_path)
         if os.path.exists(self.conf_path):
             with open(self.conf_path, 'r') as fp:
                 self.conf.update(json.load(fp))
