@@ -161,12 +161,12 @@ class QemuVM:
         command = ["qemu-system-x86_64"]
         if "name" in self.schema:
             command.append(self.schema["name"]["command"])
-        if "disks" in self.schema:
-            for disk_dict in self.schema["disks"]:
-                command.append(disk_dict["command"])
         if "connectors" in self.schema:
             if "sata" in self.schema["connectors"]:
                 command.append(self.schema["connectors"]["sata"]["command"])
+        if "disks" in self.schema:
+            for disk_dict in self.schema["disks"]:
+                command.append(disk_dict["command"])
         if "cdrom" in self.schema:
             command.append(self.schema["cdrom"]["command"])
         if "ssh_forward" in self.schema:
