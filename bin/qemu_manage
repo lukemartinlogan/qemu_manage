@@ -221,7 +221,6 @@ class QemuManager:
         self.LoadConf()
 
     def LoadConf(self):
-        print(self.conf_path)
         if os.path.exists(self.conf_path):
             with open(self.conf_path, 'r') as fp:
                 self.conf.update(json.load(fp))
@@ -371,7 +370,7 @@ class QemuManager:
         port = vm.GetPort()
         pubkey_path = os.path.join(key_dir, f'{key_name}.pub')
         privkey_path = os.path.join(key_dir, key_name)
-        ExecNode('install_pubkey', f'ssh-copy-id -f -i {privkey_path} -p {port} {username}@localhost', collect_output=False)
+        ExecNode('install_pubkey', f'ssh-copy-id -f -i {privkey_path} -p {port} {username}@localhost', collect_output=False).Run()
         ExecNode('make_ssh_dir', f'ssh -p {port} {username}@localhost mkdir ~/.ssh', collect_output=False).Run()
         ExecNode('scp_pubkey', f'scp -P {port} {pubkey_path} {username}@localhost:~/.ssh/{key_name}.pub', collect_output=False).Run()
         ExecNode('scp_privkey', f'scp -P {port} {privkey_path} {username}@localhost:~/.ssh/{key_name}', collect_output=False).Run()
