@@ -291,7 +291,7 @@ class QemuManager:
                     cloned_vm.AttachDisk(cloned_disk_type, cloned_disk_name)
             #Change the SSH forwarding port
             if 'ssh_forward' in cloned_vm.schema:
-                vm_ssh = int(cloned_vm['ssh_forward']['port'])
+                vm_ssh = int(cloned_vm.schema['ssh_forward']['port'])
                 cloned_vm.SetSSHForwarding(vm_ssh + i + 1)
                 print(f'{cloned_vm_name}: SSH port {vm_ssh + i + 1}')
         vm.SaveSchema()
