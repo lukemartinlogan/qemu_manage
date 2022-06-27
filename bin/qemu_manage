@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-from jarvis_cd.exec_node import ExecNode
-from jarvis_cd.ssh_node import SSHNode
+from jarvis_cd.basic.exec_node import ExecNode
+from jarvis_cd.comm.ssh_node import SSHNode
 import os, sys
 import json
 import shutil
@@ -206,6 +206,8 @@ class QemuVM:
         if "hardware_accel" in self.schema:
             for accel in self.schema["hardware_accel"].values():
                 command.append(accel["command"])
+        if "cpu" in self.schema:
+            command.append(self.schema["cpu"]["command"])
         return " ".join(command)
 
     def GetPort(self):
@@ -286,7 +288,7 @@ class QemuManager:
                     cloned_disk_type = disk['disk_type']
                     self.CloneDisk(disk_name, cloned_disk_name)
                     cloned_vm.DetachDisk(disk_name)
-                    cloned_vm.AttachDisk(cloned_disk_name, cloned_disk_type)
+                    cloned_vm.AttachDisk(cloned_disk_type, cloned_disk_name)
             #Change the SSH forwarding port
             if 'ssh_forward' in cloned_vm.schema:
                 vm_ssh = int(cloned_vm['ssh_forward']['port'])
