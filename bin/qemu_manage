@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-from jarvis_cd.basic.exec_node import ExecNode
-from jarvis_cd.comm.ssh_node import SSHNode
+from jarvis_cd.shell.exec_node import ExecNode
 import os, sys
 import json
 import shutil
@@ -242,9 +241,9 @@ class QemuManager:
     def CreateDisk(self, dev_name, dev_size):
         device_path = os.path.join(self.device_root, f"{dev_name}.qcow2")
         if not os.path.exists(device_path):
-            ExecNode('ImageCreate', f'qemu-img create -f qcow2 {device_path} {dev_size}', collect_output=False).Run()
+            ExecNode(f'qemu-img create -f qcow2 {device_path} {dev_size}', collect_output=False).Run()
         else:
-            ExecNode('ImageCreate', f'qemu-img resize -f qcow2 {device_path} {dev_size}', collect_output=False).Run()
+            ExecNode(f'qemu-img resize -f qcow2 {device_path} {dev_size}', collect_output=False).Run()
 
     def CloneDisk(self, dev_name, new_dev_name):
         device_path = os.path.join(self.device_root, f"{dev_name}.qcow2")
@@ -253,7 +252,7 @@ class QemuManager:
 
     def ResizeDisk(self, dev_name, dev_size):
         device_path = os.path.join(self.device_root, f"{dev_name}.qcow2")
-        ExecNode('ImageCreate', f'qemu-img resize -f qcow2 {device_path} {dev_size}', collect_output=False).Run()
+        ExecNode(f'qemu-img resize -f qcow2 {device_path} {dev_size}', collect_output=False).Run()
 
     def RemoveDisk(self, dev_name):
         device_path = os.path.join(self.device_root, f"{dev_name}.qcow2")
@@ -294,13 +293,13 @@ class QemuManager:
                 vm_ssh = int(cloned_vm.schema['ssh_forward']['port'])
                 cloned_vm.SetSSHForwarding(vm_ssh + i + 1)
                 print(f'{cloned_vm_name}: SSH port {vm_ssh + i + 1}')
-        vm.SaveSchema()
+            cloned_vm.SaveSchema()
 
     def StartVM(self, vm_name):
         vm = QemuVM(vm_name)
         command = vm.BuildCommand()
         print(command)
-        ExecNode('StartVM', command, collect_output=False).Run()
+        ExecNode(command, collect_output=False).Run()
 
     def RemoveVM(self, vm_name):
         schema_path = os.path.join(self.schema_root, f'{vm_name}_schema.json')
@@ -365,26 +364,7 @@ class QemuManager:
     def SSH(self, vm_name, username):
         vm = QemuVM(vm_name)
         port = vm.GetPort()
-        ExecNode('sshnode', f'ssh -p {port} {username}@localhost', collect_output=False).Run()
-
-    def InstallKeys(self, vm_name, username, key_dir, key_name):
-        vm = QemuVM(vm_name)
-        port = vm.GetPort()
-        pubkey_path = os.path.join(key_dir, f'{key_name}.pub')
-        privkey_path = os.path.join(key_dir, key_name)
-        ExecNode('install_pubkey', f'ssh-copy-id -f -i {privkey_path} -p {port} {username}@localhost', collect_output=False).Run()
-        ExecNode('make_ssh_dir', f'ssh -p {port} {username}@localhost mkdir ~/.ssh', collect_output=False).Run()
-        ExecNode('scp_pubkey', f'scp -P {port} {pubkey_path} {username}@localhost:~/.ssh/{key_name}.pub', collect_output=False).Run()
-        ExecNode('scp_privkey', f'scp -P {port} {privkey_path} {username}@localhost:~/.ssh/{key_name}', collect_output=False).Run()
-        commands = [
-            f'chmod 700 ~/.ssh',
-            f'chmod 644 ~/.ssh/{key_name}.pub',
-            f'chmod 600 ~/.ssh/{key_name}',
-            f'chmod 600 ~/.ssh/authorized_keys',
-            f'chmod 600 ~/.ssh/config',
-        ]
-        command = ";".join(commands)
-        ExecNode('permissions', f'ssh -p {port} {username}@localhost \"{command}\"', collect_output=False).Run()
+        ExecNode(f'ssh -p {port} {username}@localhost', collect_output=False).Run()
 
     def CreateVMScript(self):
         vm_name = input('Enter VM name: ')
@@ -503,8 +483,6 @@ if __name__ == "__main__":
         QemuManager().SetGraphics(args.inputs[0], args.inputs[1])
     elif args.option == 'ssh':
         QemuManager().SSH(args.inputs[0], args.inputs[1])
-    elif args.option == 'install_keys':
-        QemuManager().InstallKeys(args.inputs[0], args.inputs[1], args.inputs[2], args.inputs[3])
     elif args.option == 'new_vm_script':
         QemuManager().CreateVMScript()
     else:
