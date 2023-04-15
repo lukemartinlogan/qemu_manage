@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-from jarvis_cd.shell.exec_node import ExecNode
+from jarvis_util.shell.exec import Exec
+from jarvis_util.shell.local_exec import LocalExecInfo
 import os, sys
 import json
 import shutil
@@ -241,9 +242,11 @@ class QemuManager:
     def CreateDisk(self, dev_name, dev_size):
         device_path = os.path.join(self.device_root, f"{dev_name}.qcow2")
         if not os.path.exists(device_path):
-            ExecNode(f'qemu-img create -f qcow2 {device_path} {dev_size}', collect_output=False).Run()
+            Exec(f'qemu-img create -f qcow2 {device_path} {dev_size}',
+                 LocalExecInfo(collect_output=False)).Run()
         else:
-            ExecNode(f'qemu-img resize -f qcow2 {device_path} {dev_size}', collect_output=False).Run()
+            Exec(f'qemu-img resize -f qcow2 {device_path} {dev_size}',
+                 LocalExecInfo(collect_output=False)).Run()
 
     def CloneDisk(self, dev_name, new_dev_name):
         device_path = os.path.join(self.device_root, f"{dev_name}.qcow2")
@@ -252,7 +255,8 @@ class QemuManager:
 
     def ResizeDisk(self, dev_name, dev_size):
         device_path = os.path.join(self.device_root, f"{dev_name}.qcow2")
-        ExecNode(f'qemu-img resize -f qcow2 {device_path} {dev_size}', collect_output=False).Run()
+        Exec(f'qemu-img resize -f qcow2 {device_path} {dev_size}',
+             LocalExecInfo(collect_output=False)).Run()
 
     def RemoveDisk(self, dev_name):
         device_path = os.path.join(self.device_root, f"{dev_name}.qcow2")
@@ -299,7 +303,8 @@ class QemuManager:
         vm = QemuVM(vm_name)
         command = vm.BuildCommand()
         print(command)
-        ExecNode(command, collect_output=False).Run()
+        Exec(command,
+             LocalExecInfo(collect_output=False)).Run()
 
     def RemoveVM(self, vm_name):
         schema_path = os.path.join(self.schema_root, f'{vm_name}_schema.json')
